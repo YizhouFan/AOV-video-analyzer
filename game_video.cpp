@@ -74,6 +74,7 @@ class GameVideoAnalyzer {
     inline void update_frame_status(const FrameStatus& frame_status) {
         status_list_.push_back(frame_status);
     }
+    // TODO: prune heroes_list_ by deleting ephemeral heroes
 };
 
 GameVideoAnalyzer::GameVideoAnalyzer() {
@@ -285,6 +286,7 @@ void GameVideoAnalyzer::assign_hero(const int& level, const cv::Point& position,
             }
         }
         std::cout << "Identified level " << level << " hero at " << position << ", ";
+        // TODO: search all heroes whose distance is below threshold, not the minimum one.
         if ((i_min == -1) ||
             ((i_min != -1) && (ts - last_updated_[i_min] > 3000)) ||
             ((i_min != -1) && (level < heroes_list_[i_min].level))) {
@@ -310,6 +312,13 @@ void GameVideoAnalyzer::assign_hero(const int& level, const cv::Point& position,
             heroes_list_[i_min].level = level;
             last_updated_[i_min] = ts;
             std::cout << "merge old hero id (levelup) = " << hero.hero_id << std::endl;
+        } else {
+            // Level up >1, new hero
+            HeroStatus hero = {hero_id_++, position, level};
+            hero_status_list->push_back(hero);
+            heroes_list_.push_back(hero);
+            last_updated_.push_back(ts);
+            std::cout << "assign new hero id (leveldif) = " << hero.hero_id << std::endl;
         }
     }
 }
