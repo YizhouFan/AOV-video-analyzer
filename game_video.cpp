@@ -2,7 +2,7 @@
 #include <fstream>
 #include <string>
 #include <vector>
-
+# include<numeric>
 #include <opencv2/core.hpp>
 #include <opencv2/core/utility.hpp>
 #include <opencv2/imgproc.hpp>
@@ -447,16 +447,21 @@ void GameVideoAnalyzer::track_hero(cv::Mat* src, std::vector<HeroStatus>* hero_s
 
 int main(int argc, char** argv) {
     std::vector<cv::String> filenames;
-    cv::String folder = "../frames";
+    cv::String folder = "E:\\opencv\\frames/";
     cv::glob(folder, filenames);
     std::vector<FrameStatus> status_list;  // status of each frame are stored in this vector
     std::vector<double> dist;   // distances between joystick axis and center in each frame
 
     std::vector<cv::Mat> number_samples;
     for (size_t i = 0; i < 10; i++) {
-        std::string filename = "../samples/" + std::to_string(i) + ".bmp";
-        std::cout << "Loaded number sample from file " << filename << std::endl;
-        number_samples.push_back(cv::imread(filename, CV_LOAD_IMAGE_GRAYSCALE));
+        std::string filename = "E:\\opencv\\AOV-video-analyzer-master/samples/" + std::to_string(i) + ".bmp";
+        std::cout << "Loading number sample from file " << filename << std::endl;
+		cv::Mat num_sample = cv::imread(filename, CV_LOAD_IMAGE_GRAYSCALE);
+		if (!num_sample.data) {
+			std::cerr << "Load file " << filename << "failed!\n";
+			return -1;
+		}
+        number_samples.push_back(num_sample);
     }
     // cv::namedWindow("samples");
     // for (size_t i = 0; i < 10; i++) {
@@ -466,22 +471,36 @@ int main(int argc, char** argv) {
 
     std::vector<cv::Mat> number_samples_money;
     for (size_t i = 0; i < 10; i++) {
-        std::string filename = "../samples/m" + std::to_string(i) + ".bmp";
-        std::cout << "Loaded number sample from file " << filename << std::endl;
-        number_samples_money.push_back(cv::imread(filename, CV_LOAD_IMAGE_GRAYSCALE));
+        std::string filename = "E:\\opencv\\AOV-video-analyzer-master/samples/m" + std::to_string(i) + ".bmp";
+		std::cout << "Loading number sample from file " << filename << std::endl;
+		cv::Mat num_sample = cv::imread(filename, CV_LOAD_IMAGE_GRAYSCALE);
+		if (!num_sample.data) {
+			std::cerr << "Load file " << filename << "failed!\n";
+			return -1;
+		}
+		number_samples_money.push_back(num_sample);
     }
 
     std::vector<cv::Mat> number_samples_level;
     for (size_t i = 0; i < 10; i++) {
-        std::string filename = "../samples/l" + std::to_string(i) + ".bmp";
-        std::cout << "Loaded number sample from file " << filename << std::endl;
-        number_samples_level.push_back(cv::imread(filename, CV_LOAD_IMAGE_GRAYSCALE));
+        std::string filename = "E:\\opencv\\AOV-video-analyzer-master/samples/l" + std::to_string(i) + ".bmp";
+		std::cout << "Loading number sample from file " << filename << std::endl;
+		cv::Mat num_sample = cv::imread(filename, CV_LOAD_IMAGE_GRAYSCALE);
+		if (!num_sample.data) {
+			std::cerr << "Load file " << filename << "failed!\n";
+			return -1;
+		}
+        number_samples_level.push_back(num_sample);
     }
 
     // load mask.bmp used in level icon recognizion
     cv::Mat icon_mask;
-    icon_mask = cv::imread("../samples/mask.bmp", CV_LOAD_IMAGE_GRAYSCALE);
-    std::cout << "Loaded mask file." << std::endl;
+    icon_mask = cv::imread("E:\\opencv\\AOV-video-analyzer-master/samples/mask.bmp", CV_LOAD_IMAGE_GRAYSCALE);
+    std::cout << "Loading mask file." << std::endl;
+	if (!icon_mask.data) {
+		std::cerr << "Load file " << icon_mask << "failed!\n";
+		return -1;
+	}
 
     // configurations
     const double avg_err_thres_largenum = 0.3;
@@ -504,6 +523,7 @@ int main(int argc, char** argv) {
         cv::Mat src = cv::imread(filenames[i]);
         if (!src.data) {
             std::cerr << "Fail reading image!\n";
+			return -1;
         }
         game_video_analyzer.adjust_size(&src);
 
