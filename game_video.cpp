@@ -322,6 +322,7 @@ void GameVideoAnalyzer::assign_hero(const int& level, const cv::Point& position,
             if (new_hero_flag) {
                 for (auto it = heroes_nearby.begin(); it != heroes_nearby.end(); it++) {
                     if (heroes_list_[it->second].level == level - 1 && it->first < 10) {
+                        // smaller threshold @ 10 pixels
                         if (ts - last_updated_[it->second] < 3000) {
                             // don't retrieve hero after it's been missing for at least 3000ms
                             HeroStatus hero = {heroes_list_[it->second].hero_id, position, level};
