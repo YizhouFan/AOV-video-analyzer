@@ -280,54 +280,73 @@ void GameVideoAnalyzer::assign_hero(const int& level, const cv::Point& position,
         last_updated_.push_back(ts);
         appearances_.push_back(1);
     } else {
-        double dist_min = 20;   // min dist threshold
-        int i_min = -1;
+        // search all heroes whose distance is below threshold,
+        // pick the nearest one with the same level,
+        // if there's no same level, pick the nearest one with 1 level lower, given a smaller distance threshold is fulfilled.
+        double dist_min = 50;   // min dist threshold
+        std::map<double, int> heroes_nearby;    // distance, index
         for (size_t i = 0; i < heroes_list_.size(); i++) {
             double dist = sqrt(pow(position.x - heroes_list_[i].position.x, 2) + 
                                pow(position.y - heroes_list_[i].position.y, 2));
             if (dist < dist_min) {
-                dist_min = dist;
-                i_min = i;
+                heroes_nearby.insert(std::pair<double, int>(dist, i));
             }
         }
         std::cout << "Identified level " << level << " hero at " << position << ", ";
-        // TODO: search all heroes whose distance is below threshold, not the minimum one.
-        if ((i_min == -1) ||
-            ((i_min != -1) && (ts - last_updated_[i_min] > 3000)) ||
-            ((i_min != -1) && (level < heroes_list_[i_min].level))) {
+        if (heroes_nearby.empty()) {
             // new hero
-            // don't retrieve hero after it's been missing for at least 3000ms
             HeroStatus hero = {hero_id_++, position, level};
             hero_status_list->push_back(hero);
             heroes_list_.push_back(hero);
             last_updated_.push_back(ts);
             appearances_.push_back(1);
-            std::cout << "assign new hero id = " << hero.hero_id << std::endl;
-        } else if (level == heroes_list_[i_min].level) {
-            // existing hero
-            HeroStatus hero = {heroes_list_[i_min].hero_id, position, level};
-            hero_status_list->push_back(hero);
-            heroes_list_[i_min].position = position;
-            last_updated_[i_min] = ts;
-            appearances_[i_min]++;
-            std::cout << "merge old hero id = " << hero.hero_id << std::endl;
-        } else if (level == heroes_list_[i_min].level + 1) {
-            // existing hero, level up by 1
-            HeroStatus hero = {heroes_list_[i_min].hero_id, position, level};
-            hero_status_list->push_back(hero);
-            heroes_list_[i_min].position = position;
-            heroes_list_[i_min].level = level;
-            last_updated_[i_min] = ts;
-            appearances_[i_min]++;
-            std::cout << "merge old hero id (levelup) = " << hero.hero_id << std::endl;
+            std::cout << "assign new hero id (map empty) = " << hero.hero_id << std::endl;
         } else {
-            // Level up >1, new hero
-            HeroStatus hero = {hero_id_++, position, level};
-            hero_status_list->push_back(hero);
-            heroes_list_.push_back(hero);
-            last_updated_.push_back(ts);
-            appearances_.push_back(1);
-            std::cout << "assign new hero id (leveldif) = " << hero.hero_id << std::endl;
+            bool new_hero_flag = true;
+            for (auto it = heroes_nearby.begin(); it != heroes_nearby.end(); it++) {
+                if (heroes_list_[it->second].level == level) {
+                    // TODO: should this time threshold here be the same as the one to detect inactive heroes?
+                    if (ts - last_updated_[it->second] < 3000) {
+                        // don't retrieve hero after it's been missing for at least 3000ms
+                        HeroStatus hero = {heroes_list_[it->second].hero_id, position, level};
+                        hero_status_list->push_back(hero);
+                        heroes_list_[it->second].position = position;
+                        last_updated_[it->second] = ts;
+                        appearances_[it->second]++;
+                        new_hero_flag = false;
+                        std::cout << "merge old hero id = " << hero.hero_id << std::endl;
+                        break;
+                    }
+                }
+            }
+            if (new_hero_flag) {
+                for (auto it = heroes_nearby.begin(); it != heroes_nearby.end(); it++) {
+                    if (heroes_list_[it->second].level == level - 1 && it->first < 10) {
+                        if (ts - last_updated_[it->second] < 3000) {
+                            // don't retrieve hero after it's been missing for at least 3000ms
+                            HeroStatus hero = {heroes_list_[it->second].hero_id, position, level};
+                            hero_status_list->push_back(hero);
+                            heroes_list_[it->second].position = position;
+                            heroes_list_[it->second].level = level;
+                            last_updated_[it->second] = ts;
+                            appearances_[it->second]++;
+                            new_hero_flag = false;
+                            std::cout << "merge old hero id (levelup) = " << hero.hero_id << std::endl;
+                            break;
+                        }
+                    }
+                }
+            }
+            if (new_hero_flag) {
+                // new hero
+                HeroStatus hero = {hero_id_++, position, level};
+                hero_status_list->push_back(hero);
+                heroes_list_.push_back(hero);
+                last_updated_.push_back(ts);
+                appearances_.push_back(1);
+                std::cout << "assign new hero id (default) = " << hero.hero_id << std::endl;
+            }
+
         }
     }
 }
@@ -404,6 +423,8 @@ void GameVideoAnalyzer::track_hero(cv::Mat* src, std::vector<HeroStatus>* hero_s
     // }
 
     // detect numbers in the same level icon
+    // TODO: sometimes only one of the two digits are detected,
+    // to alleviate this case, try once more to detect number from a small roi of every single digit.
     std::vector<bool> is_single_digit(rect_num_vec.size(), true);
     for (size_t i = 0; i < rect_num_vec.size(); i++) {
         if (!is_single_digit[i]) {
@@ -462,10 +483,10 @@ void GameVideoAnalyzer::delete_inactive_heroes(const int& ts, const int& inactiv
         std::vector<int>::iterator ap_it = appearances_.begin() + i;
         if ((ts - last_updated_[i] > inactive_time) &&
             (appearances_[i] < num_app)) {
+            std::cout << "Deleted hero id " << heroes_list_[i].hero_id << " from list, last update at " << last_updated_[i] << "ms with " << appearances_[i] << " appearance(s)" << std::endl;
             heroes_list_.erase(hero_it);
             last_updated_.erase(lu_it);
             appearances_.erase(ap_it);
-            std::cout << "Deleted hero id " << heroes_list_[i].hero_id << " from list, last update at " << last_updated_[i] << "ms with " << appearances_[i] << " appearance(s)" << std::endl;
         }
     }
     std::cout << "Current heroes list after deleting inactive heroes:" << std::endl;
