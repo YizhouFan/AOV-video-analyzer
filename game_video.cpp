@@ -2,7 +2,7 @@
 #include <fstream>
 #include <string>
 #include <vector>
-# include<numeric>
+#include <numeric>
 #include <opencv2/core.hpp>
 #include <opencv2/core/utility.hpp>
 #include <opencv2/imgproc.hpp>
@@ -54,6 +54,9 @@ class GameVideoAnalyzer {
 
     //list of last updated timestamp for heroes in heroes_list_
     std::vector<int> last_updated_;
+
+    //list of times of appearance for heroes in heroes_list_
+    std::vector<int> appearances_;
     
   public:
     // list of status per frame
@@ -71,10 +74,10 @@ class GameVideoAnalyzer {
     void track_hero(cv::Mat*, std::vector<HeroStatus>*, const int& ts, const std::vector<cv::Mat>&, const cv::Mat&, const double&, const size_t&);
     bool is_black_white(const cv::Mat&) const;
     void assign_hero(const int&, const cv::Point&, std::vector<HeroStatus>*, const int&);
+    void delete_inactive_heroes(const int&, const int&, const int&);
     inline void update_frame_status(const FrameStatus& frame_status) {
         status_list_.push_back(frame_status);
     }
-    // TODO: prune heroes_list_ by deleting ephemeral heroes
 };
 
 GameVideoAnalyzer::GameVideoAnalyzer() {
@@ -93,6 +96,7 @@ GameVideoAnalyzer::GameVideoAnalyzer() {
     std::vector<FrameStatus>().swap(status_list_);
     std::vector<double>().swap(dist_list_);
     std::vector<int>().swap(last_updated_);
+    std::vector<int>().swap(appearances_);
     std::vector<HeroStatus>().swap(heroes_list_);
 
     // set hero id as 0
@@ -274,6 +278,7 @@ void GameVideoAnalyzer::assign_hero(const int& level, const cv::Point& position,
         hero_status_list->push_back(hero);
         heroes_list_.push_back(hero);
         last_updated_.push_back(ts);
+        appearances_.push_back(1);
     } else {
         double dist_min = 20;   // min dist threshold
         int i_min = -1;
@@ -296,6 +301,7 @@ void GameVideoAnalyzer::assign_hero(const int& level, const cv::Point& position,
             hero_status_list->push_back(hero);
             heroes_list_.push_back(hero);
             last_updated_.push_back(ts);
+            appearances_.push_back(1);
             std::cout << "assign new hero id = " << hero.hero_id << std::endl;
         } else if (level == heroes_list_[i_min].level) {
             // existing hero
@@ -303,6 +309,7 @@ void GameVideoAnalyzer::assign_hero(const int& level, const cv::Point& position,
             hero_status_list->push_back(hero);
             heroes_list_[i_min].position = position;
             last_updated_[i_min] = ts;
+            appearances_[i_min]++;
             std::cout << "merge old hero id = " << hero.hero_id << std::endl;
         } else if (level == heroes_list_[i_min].level + 1) {
             // existing hero, level up by 1
@@ -311,6 +318,7 @@ void GameVideoAnalyzer::assign_hero(const int& level, const cv::Point& position,
             heroes_list_[i_min].position = position;
             heroes_list_[i_min].level = level;
             last_updated_[i_min] = ts;
+            appearances_[i_min]++;
             std::cout << "merge old hero id (levelup) = " << hero.hero_id << std::endl;
         } else {
             // Level up >1, new hero
@@ -318,6 +326,7 @@ void GameVideoAnalyzer::assign_hero(const int& level, const cv::Point& position,
             hero_status_list->push_back(hero);
             heroes_list_.push_back(hero);
             last_updated_.push_back(ts);
+            appearances_.push_back(1);
             std::cout << "assign new hero id (leveldif) = " << hero.hero_id << std::endl;
         }
     }
@@ -432,12 +441,13 @@ void GameVideoAnalyzer::track_hero(cv::Mat* src, std::vector<HeroStatus>* hero_s
         is_heroes_list_initialized_ = true;
     }
     std::cout << "Current heroes list:" << std::endl;
-    std::cout << "Id\tLevel\tPosition\tLast updated since" << std::endl;
+    std::cout << "Id\tLevel\tPosition\tLast updated\t\tAppearances" << std::endl;
     for (size_t i = 0; i < heroes_list_.size(); i++) {
         std::cout << heroes_list_[i].hero_id << '\t';
         std::cout << heroes_list_[i].level << '\t';
         std::cout << heroes_list_[i].position << '\t';
-        std::cout << last_updated_[i] << std::endl;
+        std::cout << last_updated_[i] << '\t' << '\t';
+        std::cout << appearances_[i] << std::endl;
     }
 
     cv::namedWindow("icon");
@@ -445,16 +455,40 @@ void GameVideoAnalyzer::track_hero(cv::Mat* src, std::vector<HeroStatus>* hero_s
     // cv::waitKey(0);
 }
 
+void GameVideoAnalyzer::delete_inactive_heroes(const int& ts, const int& inactive_time, const int& num_app) {
+    for (size_t i = 0; i < heroes_list_.size(); i++) {
+        std::vector<HeroStatus>::iterator hero_it = heroes_list_.begin() + i;
+        std::vector<int>::iterator lu_it = last_updated_.begin() + i;
+        std::vector<int>::iterator ap_it = appearances_.begin() + i;
+        if ((ts - last_updated_[i] > inactive_time) &&
+            (appearances_[i] < num_app)) {
+            heroes_list_.erase(hero_it);
+            last_updated_.erase(lu_it);
+            appearances_.erase(ap_it);
+            std::cout << "Deleted hero id " << heroes_list_[i].hero_id << " from list, last update at " << last_updated_[i] << "ms with " << appearances_[i] << " appearance(s)" << std::endl;
+        }
+    }
+    std::cout << "Current heroes list after deleting inactive heroes:" << std::endl;
+    std::cout << "Id\tLevel\tPosition\tLast updated\t\tAppearances" << std::endl;
+    for (size_t i = 0; i < heroes_list_.size(); i++) {
+        std::cout << heroes_list_[i].hero_id << '\t';
+        std::cout << heroes_list_[i].level << '\t';
+        std::cout << heroes_list_[i].position << '\t';
+        std::cout << last_updated_[i] << '\t' << '\t';
+        std::cout << appearances_[i] << std::endl;
+    }
+}
+
 int main(int argc, char** argv) {
     std::vector<cv::String> filenames;
-    cv::String folder = "E:\\opencv\\frames/";
+    cv::String folder = "/home/fyz/frames";
     cv::glob(folder, filenames);
     std::vector<FrameStatus> status_list;  // status of each frame are stored in this vector
     std::vector<double> dist;   // distances between joystick axis and center in each frame
 
     std::vector<cv::Mat> number_samples;
     for (size_t i = 0; i < 10; i++) {
-        std::string filename = "E:\\opencv\\AOV-video-analyzer-master/samples/" + std::to_string(i) + ".bmp";
+        std::string filename = "../samples/" + std::to_string(i) + ".bmp";
         std::cout << "Loading number sample from file " << filename << std::endl;
 		cv::Mat num_sample = cv::imread(filename, CV_LOAD_IMAGE_GRAYSCALE);
 		if (!num_sample.data) {
@@ -471,7 +505,7 @@ int main(int argc, char** argv) {
 
     std::vector<cv::Mat> number_samples_money;
     for (size_t i = 0; i < 10; i++) {
-        std::string filename = "E:\\opencv\\AOV-video-analyzer-master/samples/m" + std::to_string(i) + ".bmp";
+        std::string filename = "../samples/m" + std::to_string(i) + ".bmp";
 		std::cout << "Loading number sample from file " << filename << std::endl;
 		cv::Mat num_sample = cv::imread(filename, CV_LOAD_IMAGE_GRAYSCALE);
 		if (!num_sample.data) {
@@ -483,7 +517,7 @@ int main(int argc, char** argv) {
 
     std::vector<cv::Mat> number_samples_level;
     for (size_t i = 0; i < 10; i++) {
-        std::string filename = "E:\\opencv\\AOV-video-analyzer-master/samples/l" + std::to_string(i) + ".bmp";
+        std::string filename = "../samples/l" + std::to_string(i) + ".bmp";
 		std::cout << "Loading number sample from file " << filename << std::endl;
 		cv::Mat num_sample = cv::imread(filename, CV_LOAD_IMAGE_GRAYSCALE);
 		if (!num_sample.data) {
@@ -495,7 +529,7 @@ int main(int argc, char** argv) {
 
     // load mask.bmp used in level icon recognizion
     cv::Mat icon_mask;
-    icon_mask = cv::imread("E:\\opencv\\AOV-video-analyzer-master/samples/mask.bmp", CV_LOAD_IMAGE_GRAYSCALE);
+    icon_mask = cv::imread("../samples/mask.bmp", CV_LOAD_IMAGE_GRAYSCALE);
     std::cout << "Loading mask file." << std::endl;
 	if (!icon_mask.data) {
 		std::cerr << "Load file " << icon_mask << "failed!\n";
@@ -557,6 +591,9 @@ int main(int argc, char** argv) {
         std::vector<HeroStatus> hero_status_list;
         game_video_analyzer.track_hero(&src, &hero_status_list, ts, number_samples_level, icon_mask, 0.3, bw_thres_level);
         status.hero_list = hero_status_list;
+
+        // prune heroes list
+        game_video_analyzer.delete_inactive_heroes(ts, 1000, 5);
 
         // Use exact coordiates for spell and skill icon
         int num;
