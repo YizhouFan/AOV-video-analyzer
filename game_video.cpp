@@ -124,7 +124,7 @@ int GameVideoAnalyzer::detect_number_roi(cv::Mat* src, const cv::Rect& box, cons
         // check h/w ratio
         double hw_ratio_roi = static_cast<double>(src_roi.rows) / static_cast<double>(src_roi.cols);
         double hw_ratio_sample = static_cast<double>(number_sample.rows) / static_cast<double>(number_sample.cols);
-        if (hw_ratio_roi / hw_ratio_sample > 1.2 || hw_ratio_roi / hw_ratio_sample < 0.8) {
+        if (hw_ratio_roi / hw_ratio_sample > 1.3 || hw_ratio_roi / hw_ratio_sample < 0.8) {
             continue;
         }
 
